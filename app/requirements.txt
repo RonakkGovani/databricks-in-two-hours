@@ -1,0 +1,7 @@
+# Pinned deliberately. An unpinned Streamlit that ships a breaking change the
+# week of your workshop is a bad surprise. Bump these after a dry run.
+streamlit==1.42.0
+databricks-sdk==0.40.0
+databricks-sql-connector==3.7.0
+pandas==2.2.3
+pyarrow==18.1.0

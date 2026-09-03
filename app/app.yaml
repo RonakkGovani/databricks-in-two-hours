@@ -1,0 +1,11 @@
+command: ["streamlit", "run", "app.py"]
+
+env:
+  # Attach a SQL warehouse to the app under Edit > Resources and give the
+  # resource the key "sql-warehouse". Databricks injects its ID here.
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+
+  # Change this if your attendees used a different catalog or schema.
+  - name: WORKSHOP_TABLE
+    value: workspace.delta_workshop.trips
