@@ -1,12 +1,14 @@
-# Databricks in Two Hours — facilitator runbook
+# Databricks in Two Hours
 
-A hands-on workshop for people who have never used Databricks. Runs entirely on
-Databricks Free Edition. Attendees finish having built a Delta table and deployed
-a Streamlit app that reads its version history.
+A hands-on, self-contained workshop for people who are new to Databricks. You
+build a Delta table, explore how Delta Lake works, and deploy a Streamlit app —
+the **Delta Time Machine** — that reads the table's version history and lets you
+scrub back through every change you made. It runs entirely on Databricks Free
+Edition.
 
 ```
 notebooks/01_setup_and_unity_catalog.py   Unity Catalog + build the table
-notebooks/02_delta_lake_concepts.py       The Delta block, six ideas
+notebooks/02_delta_lake_concepts.py       Delta Lake, six ideas
 app/app.py                                Delta Time Machine (Streamlit)
 app/app.yaml                              Databricks Apps config
 app/requirements.txt                      Python dependencies
@@ -15,95 +17,115 @@ slides/delta_table_anatomy.svg            Diagram for the Delta explanation
 
 ---
 
-## Send this to attendees 48 hours ahead
+## Before you start
 
-Not optional. Account creation during the session will cost you 20 minutes.
+1. Sign up for [Databricks Free Edition](https://www.databricks.com/learn/free-edition).
+   Sign in with email OTP, Google, or Microsoft — there is no SSO.
+2. Log in once and confirm you reach a workspace.
+3. You only need a browser. There is nothing to install locally.
 
-> 1. Sign up for Databricks Free Edition at https://www.databricks.com/learn/free-edition
->    (email OTP, Google, or Microsoft sign-in — there is no SSO)
-> 2. Log in once and confirm you reach a workspace
-> 3. Bring a laptop with a browser. Nothing to install.
+Free Edition allows **one Databricks App per account**, so use your own account.
+There is no shared-workspace option.
 
-Free Edition allows **one Databricks App per account**, so everyone needs their
-own account. There is no shared-workspace option.
-
----
-
-## Run of show
-
-| Time | Segment | What you are doing |
-| --- | --- | --- |
-| 0:00–0:10 | Workspace tour | Sidebar, notebooks, Catalog, Compute. Serverless only — no cluster config to teach. |
-| 0:10–0:20 | Unity Catalog | Notebook 01. Three-level namespace, create the schema, land `trips`. |
-| 0:20–0:50 | Delta Lake | Notebook 02. Show the SVG diagram before running any code. |
-| 0:50–1:30 | Build the app | Create app from template, swap in `app/`, attach warehouse, deploy. |
-| 1:30–1:45 | The payoff | Scrub the version slider. Connect it back to the commits they made. |
-| 1:45–2:00 | Buffer and next steps | Do not schedule anything here. |
-
-The buffer is load-bearing. App compute provisioning is the least predictable
-step in the whole session.
+Expect the whole workshop to take about two hours end to end. Compute
+provisioning for the app is the least predictable step, so leave yourself some
+slack near the finish.
 
 ---
 
-## Getting the code into their workspace
+## 1. Get the code into your workspace
 
-Git folders, not the CLI. Nobody installs anything.
+Use a Git folder — nothing to install.
 
-1. Push this directory to a repo your attendees can reach
-2. In the workspace: **Workspace → Create → Git folder**, paste the repo URL
-3. Notebooks open directly from the Git folder
+1. In the workspace sidebar: **Workspace → Create → Git folder**
+2. Paste this repository's HTTPS URL and clone it
+3. The notebooks open directly from the Git folder as real notebooks with cells
+   (they are stored in Databricks source format, not as flat scripts)
 
-The `.py` notebooks are in Databricks source format, so they import as real
-notebooks with cells, not as flat scripts.
+If you cloned earlier and the layout looks different, open the Git folder's git
+menu and **Pull** to get the latest `notebooks/`, `app/`, and `slides/` folders.
 
 ---
 
-## The Delta block (0:20–0:50)
+## 2. Unity Catalog and building the table
 
-Put `slides/delta_table_anatomy.svg` on screen *before* running anything. The
-whole block lands if they accept one idea first: a Delta table is Parquet files
-plus an ordered log of commits, and the log decides which files count.
+Open `notebooks/01_setup_and_unity_catalog.py` and run it top to bottom
+(`Shift + Enter` per cell). It takes about ten minutes and leaves you with one
+table that the rest of the workshop builds on:
 
-Then run notebook 02 in order. Six ideas:
+```
+workspace.delta_workshop.trips
+```
 
-1. **What it is** — `DESCRIBE DETAIL`
+Along the way it introduces Unity Catalog's three-level namespace
+(`catalog.schema.table`), creates the schema, and lands a slice of the NYC taxi
+sample data. If the `samples` catalog is unavailable in your workspace, the
+notebook automatically generates equivalent synthetic rows so the workshop still
+runs.
+
+When it finishes, open **Catalog** in the sidebar and click down through
+`workspace → delta_workshop → trips` to see it in the UI. Note the
+**Permissions** tab — it matters later, because the app runs as its own identity
+and will need `SELECT` on this table.
+
+---
+
+## 3. Delta Lake concepts
+
+Open `slides/delta_table_anatomy.svg` first and look at it before running any
+code. The whole section lands once you accept one idea: **a Delta table is
+Parquet files plus an ordered log of commits, and the log decides which files
+count.**
+
+Then run `notebooks/02_delta_lake_concepts.py` top to bottom. It walks through
+six ideas, each of which adds a new version to the table's history:
+
+1. **What a Delta table is** — `DESCRIBE DETAIL`
 2. **It behaves like a table** — `UPDATE`, `DELETE`
 3. **Every change is a version** — `DESCRIBE HISTORY`
-4. **Time travel** — `VERSION AS OF 0` vs now
+4. **Time travel** — `VERSION AS OF 0` versus now
 5. **MERGE** — the upsert real pipelines run on
-6. **Schema enforcement, then evolution** — a write that fails on purpose, then
-   the same write with `mergeSchema`
+6. **Schema enforcement, then evolution** — a write that is *rejected* on
+   purpose, then the same write with `mergeSchema`
 
-Name and skip: `OPTIMIZE`, liquid clustering, `VACUUM`, change data feed. The
-only one worth a spoken sentence is `VACUUM`, because it is what eventually ends
-time travel.
+Two things to expect so they don't surprise you:
 
-**Do not** try to reveal `_delta_log` with `dbutils.fs.ls`. On managed Unity
-Catalog tables the storage path is not reliably browsable, and it fails ugly in
-front of an audience. The diagram does that job.
+- **Section 6's first write is supposed to fail.** It tries to append a column
+  the table has never seen, and Delta rejects it with a
+  `DELTA_METADATA_MISMATCH`. That rejection is the point — the cell catches it
+  and prints "Rejected, as intended." The very next cell repeats the write with
+  `mergeSchema` enabled, which succeeds and backfills `NULL` for existing rows.
+- **Leave `RESTORE` alone.** Section 4 mentions it but keeps it commented. You
+  want the deletions to stay visible in the app at the end.
 
-**Do not** run `RESTORE`. You want the deletions still visible in the app.
+By the end, that version history is exactly what the app reads. Note the final
+version number the last cell prints.
 
 ---
 
-## Deploying the app (0:50–1:30)
+## 4. Deploy the Delta Time Machine app
+
+The app compute takes a few minutes to start, so begin this step before you need
+the result.
 
 1. **Compute → Apps → Create app**
-2. Choose **Custom**, name it `delta-time-machine`, create
-3. Wait for app compute to start — this is the slow step
-4. Under **Edit → Resources**, add the SQL warehouse. **Set the resource key to
-   `sql-warehouse`** — `app.yaml` reads the ID from that exact key
+2. Choose **Custom**, name it `delta-time-machine`, and create it
+3. Wait for the app compute to reach **Running** — this is the slow step
+4. Under **Edit → Resources**, add your **SQL warehouse**. **Set the resource key
+   to exactly `sql-warehouse`** — `app.yaml` reads the warehouse ID from that key
 5. Give the resource **CAN USE** permission
-6. Choose **Deploy**, navigate to your Git folder, select the `app/` folder
+6. Click **Deploy**, browse into your Git folder, and select the **`app`**
+   folder (the one containing `app.py` and `app.yaml` — not the repo root)
 7. Open the app URL
+
+Free Edition gives you one 2X-Small SQL warehouse. If it is asleep, start it
+manually first, or the app's first query will hang.
 
 ### Grant the app access to the table
 
-The app runs as its own service principal, not as the attendee. It needs read
-access, or the app loads and immediately shows an error.
-
-Run in a notebook, substituting the app's service principal from the app's
-**Authorization** page:
+The app runs as its own service principal, not as you. Without read access it
+loads and immediately shows an error. Open the app's **Authorization** page, copy
+its service principal ID, and run this in a notebook:
 
 ```sql
 GRANT USE CATALOG ON CATALOG workspace TO `<service-principal-id>`;
@@ -111,53 +133,49 @@ GRANT USE SCHEMA ON SCHEMA workspace.delta_workshop TO `<service-principal-id>`;
 GRANT SELECT ON TABLE workspace.delta_workshop.trips TO `<service-principal-id>`;
 ```
 
-This step is the single most common reason the app fails at the finish line.
-Budget five minutes for it and put the SQL on a slide.
+This is the single most common reason the app fails at the finish line.
 
 ---
 
-## Known failure modes
+## 5. The payoff
 
-| Symptom | Cause and response |
+Open the app and scrub the version slider. Each version is one of the commits
+you made in notebook 02 — watch the row count, average fare, and other metrics
+change as you move between `CREATE`, `UPDATE`, `DELETE`, `MERGE`, and the
+`mergeSchema` write. The "Full history" tab is the Delta transaction log, and the
+"The query" tab shows that the only difference between reading the present and
+the past is two words: `VERSION AS OF`.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
 | --- | --- |
-| `Compute error — App creation failed unexpectedly` | Known intermittent Free Edition backend issue, not their code. Delete the app and retry once. If it recurs, fall back to your recording. |
-| App shows a permissions error on load | Service principal grants not applied. Run the `GRANT` block above. |
-| `DATABRICKS_WAREHOUSE_ID is not set` | The warehouse resource is missing or its key is not `sql-warehouse`. |
-| Warehouse is asleep, first query hangs | Free Edition gets one 2X-Small warehouse. Start it manually before the session. |
-| Compute stops entirely mid-session | Fair usage quota exceeded — compute is unavailable for the rest of the day. Data is not deleted. Nothing to do but switch to demo mode. |
-| `samples.nyctaxi.trips` not found | Notebook 01 detects this and generates synthetic rows automatically. |
-
-Two hard limits to state out loud so nobody is surprised later:
-
-- Apps stop automatically 24 hours after being started or redeployed. They can
-  restart them, but the app will not still be running next week untouched.
-- Outbound internet is restricted to a limited set of trusted domains, so the
-  app cannot call an arbitrary external API.
+| `App creation failed unexpectedly` | Known intermittent Free Edition backend issue, not your code. Delete the app and retry once. |
+| App shows a permissions error on load | The service principal grants were not applied. Run the `GRANT` block above with the correct SP ID. |
+| `DATABRICKS_WAREHOUSE_ID is not set` | The warehouse resource is missing, or its key is not exactly `sql-warehouse`. |
+| Deploy can't find `app.yaml` | You selected the repo root instead of the `app` folder. Redo step 6 and pick `app`. |
+| First query hangs | The warehouse is asleep. Start it manually and retry. |
+| `PERSIST TABLE is not supported on serverless compute` | Serverless rejects `.cache()`/`.persist()`. The notebook already avoids this; if you edited a cell, remove the `.cache()` call. |
+| Compute stops mid-session | Fair-usage quota exceeded — compute is unavailable for the rest of the day. Your data is not deleted. |
+| `samples.nyctaxi.trips` not found | Expected on some workspaces. Notebook 01 detects this and generates synthetic rows automatically. |
 
 ---
 
-## Before the session — dry run
+## Limits worth knowing
 
-Do this on a **fresh** Free Edition account, not your own well-configured one.
-Every gap in these instructions shows up on a clean account and nowhere else.
-
-- [ ] Git folder clones
-- [ ] Notebook 01 runs top to bottom
-- [ ] Notebook 02 runs top to bottom, and the schema-enforcement cell in section 6
-      fails with a rejected-write message rather than any other error
-- [ ] `MERGE` reports both updated *and* inserted rows
-- [ ] App creates, deploys, and loads
-- [ ] Version slider changes the row count
-- [ ] Screen recording captured as fallback
-
-Versions in `app/requirements.txt` are pinned on purpose. If the dry run passes,
-leave them alone until after the session — an upstream Streamlit release the week
-of your workshop is not a variable you want.
+- Apps stop automatically 24 hours after being started or redeployed. You can
+  restart them, but an app will not still be running untouched next week.
+- Outbound internet from the app is restricted to a limited set of trusted
+  domains, so it cannot call an arbitrary external API.
+- The versions in `app/requirements.txt` are pinned deliberately. Leave them
+  alone unless you have a reason to change them.
+- Free Edition is for personal, non-commercial use. If you are running this as
+  internal company training, check that framing against the terms first — a paid
+  trial workspace may be more appropriate.
 
 ---
 
-## A note on Free Edition terms
-
-Free Edition is for personal, non-commercial use. If this workshop is internal
-company training, check that framing against the terms before you run it — a
-paid trial workspace may be the more appropriate vehicle.
+Facilitators running this as a live session: see [`FACILITATOR.md`](FACILITATOR.md)
+for the run-of-show, prep checklist, and teaching notes.
