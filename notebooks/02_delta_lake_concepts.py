@@ -245,14 +245,15 @@ print(FQN)
 
 from pyspark.sql import functions as F
 
-# .cache() + .count() forces this batch into memory now, so the append below is
-# not reading the same table it is writing to.
-extra = (
+# Serverless compute rejects .cache()/PERSIST. We want the same effect it gave us:
+# a batch fully materialized up front, decoupled from the table we're about to
+# write to. Collecting the rows and rebuilding an independent DataFrame does that.
+staged = (
     spark.table(FQN)
     .limit(50)
     .withColumn("payment_type", F.lit("card"))   # a column the table has never seen
-    .cache()
 )
+extra = spark.createDataFrame(staged.collect(), staged.schema)
 print(f"{extra.count()} rows staged, with an extra column")
 
 try:
