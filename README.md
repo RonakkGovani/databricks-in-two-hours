@@ -174,8 +174,3 @@ the past is two words: `VERSION AS OF`.
 - Free Edition is for personal, non-commercial use. If you are running this as
   internal company training, check that framing against the terms first — a paid
   trial workspace may be more appropriate.
-
----
-
-Facilitators running this as a live session: see [`FACILITATOR.md`](FACILITATOR.md)
-for the run-of-show, prep checklist, and teaching notes.
